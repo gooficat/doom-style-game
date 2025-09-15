@@ -30,9 +30,7 @@ typedef struct {
     double sa, ca;
 } player_t;
 
-player_t p = {
-    70, -110, 20, 0, 0
-};
+player_t p;
 
 typedef struct {
     double  x1, y1,
@@ -45,7 +43,7 @@ typedef struct {
 typedef struct {
     int idx, end;
     double z1, z2;
-    uint32_t cc, fc;
+    uint32_t c;
     double x, y;
     double dist;
     int* slut;
@@ -79,49 +77,61 @@ sector_t* sectors;
 int wallCount = 0;
 int sectCount = 0;
 
-void loadMap(const char* filePath) {
+int loadMap(const char* filePath) {
     FILE* f = fopen(filePath, "r");
-    walls = malloc(sizeof(wall_t));
-    sectors = malloc(sizeof(sector_t));
     char ln[256];
     while (fgets(ln, 256, f)) {
         switch(ln[0]) {
             case 'w':
                 wallCount++;
                 walls = realloc(walls, sizeof(wall_t) * (wallCount));
-                wall_t* w = &walls[wallCount-1];
-                sscanf(ln, "w %i %i %i %i", w->x1, w->x2, w->y1, w->y2);
-                w->c = 0xFF00FFFF;
+                walls[wallCount-1] = (wall_t) { 0 };
+                sscanf(ln,
+                    "w %lf %lf %lf %lf %x",
+                    &walls[wallCount-1].x1,
+                    &walls[wallCount-1].y1,
+                    &walls[wallCount-1].x2, 
+                    &walls[wallCount-1].y2,
+                    &walls[wallCount-1].c
+                );
+                walls[wallCount-1].c = 0xFF00FFFF;
                 break;
             case 's':
                 sectCount++;
                 sectors = realloc(sectors, sizeof(sector_t) * (sectCount));
-                sector_t* s = &sectors[sectCount-1];
-                sscanf(ln, "s %i %i %i %i", s->idx, s->end, s->z1, s->z2);
-                s->cc = 0xFFFFFFFF;
-                s->fc = 0xFFFF00FF;
+                sectors[sectCount-1] = (sector_t) { 0 };
+                sscanf(ln,
+                    "s %d %d %lf %lf %x",
+                    &sectors[sectCount-1].idx,
+                    &sectors[sectCount-1].end,
+                    &sectors[sectCount-1].z1,
+                    &sectors[sectCount-1].z2,
+                    &sectors[sectCount-1].c
+                );
                 break;
             case 'p':
-                //sscanf(ln, "p %f %f %f %f %f", p.x, p.y, p.z, p.a, p.l);
+                p = (player_t) { 0 };
+                sscanf(ln, "p %lf %lf %lf %lf %lf", &p.x, &p.y, &p.z, &p.a, &p.l);
                 break;
             default:
                 break;
         }
+        // printf(ln);
     }
-        printf("%i %i %f %f", sectors[0].idx, sectors[0].end, sectors[0].z1, sectors[0].z2);
     fclose(f);
+    return 1;
 }
 
-double distance(double x, double y) {
+double dist(double x, double y) {
     // printf("%f\n", x);
     // printf("%f\n", y);
-    
-    return sqrt((x * x) + (y * y));
+    double d = (x * x) + (y * y);
+    if (!d) d = 1;
+    return sqrt(d);
 }
 
-void drawWall(int x1, int x2, int b1, int b2, int t1, int t2, uint32_t color, int s) {
+void drawWall(int x1, int x2, int b1, int b2, int t1, int t2, int s, int w, int i) {
     int x, y;
-
 
     //dist
     int dyb = b2 - b1;
@@ -130,36 +140,55 @@ void drawWall(int x1, int x2, int b1, int b2, int t1, int t2, uint32_t color, in
 
     int xs = x1; //x start
 
-    x1 = SDL_clamp(x1, 0, scrW-1);
-    x2 = SDL_clamp(x2, 0, scrW-1);
+    if (x1 < 1) x1 = 1;
+    if (x1 > scrW-2) x1 = scrW - 2;
+    if (x2 < 1) x2 = 1;
+    if (x2 > scrW-2) x2 = scrW - 2;
     
 
     for (x = x1; x < x2; x++) {
         int y1 = dyb * (x - xs + 0.5) / dx + b1;
         int y2 = dyt * (x - xs + 0.5) / dx + t1;
 
-        y1 = SDL_clamp(y1, 0, scrH-1);
-        y2 = SDL_clamp(y2, 0, scrH-1);
+        if (y1 < 1) y1 = 1;
+        if (y1 > scrH-2) y1 = scrH - 2;
+        if (y2 < 1) y2 = 1;
+        if (y2 > scrH-2) y2 = scrH - 2;
 
-        switch (sectors[s].surf) {
-            case 2:
-                sectors[s].slut[x] = y1;
-                break;
-            case 1:
+
+        if (!i) {
+            if (sectors[s].surf == 1)
                 sectors[s].slut[x] = y2;
-                break;
-            case -2:
-                for (y = sectors[s].slut[x]; y < y2; y++)
-                    pixel(x, y, sectors[s].cc);
-                break;
-            case -1: //-2
-                for (y = y2; y < sectors[s].slut[x]; y++)
-                    pixel(x, y, sectors[s].fc);
-                break;
-        }
-//        if (sectors[s].surf < 0)
+            else
+                sectors[s].slut[x] = y1;
             for (y = y1; y < y2; y++)
-                pixel(x, y, color);
+                pixel(x, y, sectors[s].c);
+        }
+        else {
+            if (sectors[s].surf == 1)
+                y1 = sectors[s].slut[x];
+            else
+                y2 = sectors[s].slut[x];
+            for (y = y1; y < y2; y++)
+                pixel(x, y, walls[w].c);
+        }
+        // switch (sectors[s].surf) {
+        //     case 2:
+        //         sectors[s].slut[x] = y1;
+        //         break;
+        //     case 1:
+        //         sectors[s].slut[x] = y2;
+        //         break;
+        //     case -2:
+        //         for (y = sectors[s].slut[x]; y < y2; y++)
+        //             pixel(x, y, sectors[s].cc);
+        //         break;
+        //     case -1: //-2
+        //         for (y = y2; y < sectors[s].slut[x]; y++)
+        //             pixel(x, y, sectors[s].fc);
+        //         break;
+        // }
+//        if (sectors[s].surf < 0)
 
         // DrawPixel(x, y1, GREEN);
         // DrawPixel(x, y2, GREEN);
@@ -168,27 +197,26 @@ void drawWall(int x1, int x2, int b1, int b2, int t1, int t2, uint32_t color, in
 
 void clipBehind(int* x1, int* y1, int* z1, int x2, int y2, int z2) {
     double da = *y1;
-    double d = da - y2; if (d) d = 1;
-    double s = da / (da - y2);
+    double d = da - y2; if (!d) d = 1;
+    double s = da / d;
 
     *x1 = *x1 + s * (x2 - (*x1));
     *y1 = *y1 + s * (y2 - (*y1)); if (!(*y1)) *y1 = 1;
-    
     *z1 = *z1 + s * (z2 - (*z1));
 }
-#define FOCAL 200
-void drawSectors() {
-    int s, w;
+#define FOCAL 250
+void render() {
+    int s = 0, w;
 
     
-    double x = sectors[0].x - p.x;
-    double y = sectors[0].y - p.y;
+       double x = sectors[s].x - p.x;
+       double y = sectors[s].y - p.y;
     
-    double oldx = x;
-    x = x * p.ca + y * p.sa;
-    y = y * p.ca - oldx * p.sa;
+       double oldx = x;
+        x = x * p.ca + y * p.sa;
+        y = y * p.ca - oldx * p.sa;
 
-    sectors[0].dist = distance(x, y);
+        sectors[s].dist = dist(x, y);
 
     for (s = 1; s < sectCount; s++) {
         x = sectors[s].x - p.x;
@@ -198,21 +226,38 @@ void drawSectors() {
         x = x * p.ca + y * p.sa;
         y = y * p.ca - oldx * p.sa;
 
-        sectors[s].dist = distance(x, y);
+        sectors[s].dist = dist(x, y);
         if (sectors[s].dist > sectors[s-1].dist) {
-            sector_t secswp;
-            secswp = sectors[s];
+            sector_t swp;
+            swp = sectors[s];
             sectors[s] = sectors[s-1];
-            sectors[s-1] = secswp;
+            sectors[s-1] = swp;
         }
     }
     for (s = 0; s < sectCount; s++) {
 //        static enum surf {} surf;
-        if (p.z > sectors[s].z1) sectors[s].surf = 1;
-        else if (p.z < sectors[s].z2) sectors[s].surf = 2;
-        else sectors[s].surf = 0;
-        for (int i = 0; i < 2; i++) {
+        int cycles;
+        if (p.z > sectors[s].z1) {
+            sectors[s].surf = 1;
+            cycles = 2;
+            memset(sectors[s].slut, scrH, sizeof(int) * scrW);
+        }
+        else if (p.z < sectors[s].z2) {
+            sectors[s].surf = 2;
+            cycles = 2;
+            memset(sectors[s].slut, 0, sizeof(int) * scrW);
+        }
+        else {
+            sectors[s].surf = 0;
+            cycles = 1;
+        }
+
+
+        for (int i = 0; i < cycles; i++) {
             for (w = sectors[s].idx; w < sectors[s].end; w++) {
+
+            //     pixel(walls[w].x1 + 100, walls[w].y1 + 100, walls[w].c);
+            //     pixel(walls[w].x2 + 100, walls[w].y2 + 100, walls[w].c);
                 int wx[2],
                     wy[2],
                     wb[2],
@@ -225,7 +270,7 @@ void drawSectors() {
                 int x2 = walls[w].x2 - p.x,
                     y2 = walls[w].y2- p.y;
                 
-                if (!i) {
+                if (i) {
                     int swap;
                     swap = x1;
                     x1 = x2;
@@ -249,13 +294,13 @@ void drawSectors() {
 
 
                 // clip
-                if (wy[0] <= 0 && wy[1] <= 0) {
-                    return;
+                if (wy[0] < 1 && wy[1] < 1) {
+                    continue;
                 }
-                if (wy[0] <= 0) {
+                if (wy[0] < 1) {
                     clipBehind(&wx[0], &wy[0], &wb[0], wx[1], wy[1], wb[1]);
                 }
-                else if (wy[1] <= 0) {
+                if (wy[1] < 1) {
                     clipBehind(&wx[1], &wy[1], &wb[1], wx[0], wy[0], wb[0]);
                 }
 
@@ -282,30 +327,31 @@ void drawSectors() {
                 // if (wt[0] < 0 && wt[0] >= scrH) return;
                 // if (wt[1] < 0 && wt[1] >= scrH) return;
                 
-                drawWall(wx[0], wx[1], wb[0], wb[1], wt[0], wt[1], walls[w].c, s);
+                drawWall(wx[0], wx[1], wb[0], wb[1], wt[0], wt[1], s, w, i);
             }
-            sectors[s].surf *= -1;
+            // sectors[s].surf *= -1;
         }
     }
 }
 
-void main() {
+int main() {
+    loadMap("C:\\Users\\User\\Pictures\\doom-style-game\\map.txt");
+    
 	SDL_Init(SDL_INIT_VIDEO);
 
     SDL_Rect Bounds;
     SDL_GetDisplayBounds(0, &Bounds);
-    scrW = Bounds.w;
-    scrH = Bounds.h;
+    scrW = 640;//Bounds.w;
+    scrH = 480;//Bounds.h;
 
-    window = SDL_CreateWindow("doom-style game!", 0, 0, scrW, scrH, SDL_WINDOW_BORDERLESS);
+    window = SDL_CreateWindow("doom-style game!", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, scrW, scrH, SDL_WINDOW_SHOWN);
 	surface = SDL_GetWindowSurface(window);
 	pixels = (uint32_t*)surface->pixels;
 
-    loadMap("map.txt");
 
 
     for (int s = 0; s < sectCount; s++) {
-        printf("%i %i %f %f", sectors[s].idx, sectors[s].end, sectors[s].z1, sectors[s].z2);
+        //("%d %d %d %d", sectors[s].idx, sectors[s].end, sectors[s].z1, sectors[s].z2);
         //calculates the sector position as a vector
         double vx;
         double vy;
@@ -345,36 +391,26 @@ void main() {
             p.ca = cos(p.a);
             //
             double movex = 0, movey = 0, movez = 0;
-            if (keys[SDL_SCANCODE_W]) {
+            if (keys[SDL_SCANCODE_W])
                 movey++;
-            }
-            if (keys[SDL_SCANCODE_S]) {
+            if (keys[SDL_SCANCODE_S])
                 movey--;
-            }
-            if (keys[SDL_SCANCODE_A]) {
+            if (keys[SDL_SCANCODE_A])
                 movex--;
-            }
-            if (keys[SDL_SCANCODE_D]) {
+            if (keys[SDL_SCANCODE_D])
                 movex++;
-            }
-            if (keys[SDL_SCANCODE_SPACE]) {
+            if (keys[SDL_SCANCODE_SPACE])
                 movez++;
-            }
-            if (keys[SDL_SCANCODE_LSHIFT]) {
+            if (keys[SDL_SCANCODE_LSHIFT])
                 movez--;
-            }
-            if (keys[SDL_SCANCODE_LEFT]) {
+            if (keys[SDL_SCANCODE_LEFT])
                 p.a -=  P_RSPD * deltaTime;
-            }
-            if (keys[SDL_SCANCODE_RIGHT]) {
+            if (keys[SDL_SCANCODE_RIGHT])
                 p.a +=  P_RSPD * deltaTime;
-            }
-            if (keys[SDL_SCANCODE_UP]) {
+            if (keys[SDL_SCANCODE_UP])
                 p.l -=  P_RSPD * deltaTime;
-            }
-            if (keys[SDL_SCANCODE_DOWN]) {
+            if (keys[SDL_SCANCODE_DOWN])
                 p.l +=  P_RSPD * deltaTime;
-            }
 
                 
             int oldx = movex;
@@ -388,7 +424,8 @@ void main() {
         
 		SDL_LockSurface(surface);
 		memset(pixels, 0, sizeof(uint32_t) * scrW * scrH);
-            drawSectors();
+            render();
+            pixel(p.x, p.y, 0xFFFFFFFF);
 		SDL_UnlockSurface(surface);
 		SDL_UpdateWindowSurface(window);
     }
@@ -397,4 +434,5 @@ void main() {
     }
 	SDL_DestroyWindow(window);
 	SDL_Quit();
+    return 0;
 }
