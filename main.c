@@ -201,16 +201,16 @@ void drawWall(int x1, int x2, int b1, int b2, int t1, int t2, int s, int w, int 
                     float z = y + la;
                     if (!z)
                         z = 0.0001;
-                    float fx = x2 / z * za;
-                    float fy = FOCAL / z * za;
+                    float fx = x2 / z * za * 64.0f * (M_PI);
+                    float fy = FOCAL / z * za * 64.0f * (M_PI);
 
-                    float rx = fx * p.ca + fy * p.sa - (p.x / (120.0));
-                    float ry = fy * p.ca - fx * p.sa - (p.y / (120.0));
+                    float rx = fx * p.ca + fy * p.sa + (p.x / (-M_PI));
+                    float ry = fy * p.ca - fx * p.sa + (p.y / (-M_PI));
 
                     if (rx < 0) rx = -rx + 1;
                     if (ry < 0)  ry = -ry + 1;
 
-                    pixel(x2 + xo, y + yo, Brickwall3_Texture[((int)ry % 64) + ((int)rx % 64)]);
+                    pixel(x2 + xo, y + yo, Brickwall3_Texture[(int)ry % 64 * 64 + (int)rx % 64]);
             }
         }
         ht += ht_step;
